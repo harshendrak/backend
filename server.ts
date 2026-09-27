@@ -1,7 +1,20 @@
-import express, { Request, Response, NextFunction } from 'express';
+import * as dotenv from 'dotenv';
+dotenv.config();
+import express from 'express';
+import type { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
 
 const app = express();
 app.use(express.json());
+
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'development' ? 'fallback-local-secret' : null);
+if (!JWT_SECRET) {
+    console.error('FATAL ERROR: JWT_SECRET is not defined.');
+    process.exit(1);
+}
+if (process.env.NODE_ENV === 'development' && !process.env.JWT_SECRET) {
+    console.warn('WARNING: Using fallback JWT_SECRET for local development.');
+}
 
 // Logger middleware
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -47,7 +60,8 @@ app.post('/auth/signup', (req, res) => {
     };
     users.set(email, newUser);
     
-    res.status(201).json({ token: `mock_jwt_token_${newUser.id}` });
+    const token = jwt.sign({ id: newUser.id, email: newUser.email }, JWT_SECRET, { expiresIn: '7d' });
+    res.status(201).json({ token });
 });
 
 app.post('/auth/login', (req, res) => {
@@ -58,31 +72,31 @@ app.post('/auth/login', (req, res) => {
         return res.status(401).json({ error: 'Invalid credentials' });
     }
     
-    res.status(200).json({ token: `mock_jwt_token_${user.id}` });
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    res.status(200).json({ token });
 });
 
 // Dummy auth middleware to extract token
 const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer mock_jwt_token_')) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'Unauthorized' });
     }
-    const userId = authHeader.replace('Bearer mock_jwt_token_', '');
+    const token = authHeader.replace('Bearer ', '');
     
-    let foundUser = null;
-    for (const [email, u] of users.entries()) {
-        if (u.id === userId) {
-            foundUser = u;
-            break;
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET) as { id: string, email: string };
+        const foundUser = users.get(decoded.email);
+        
+        if (!foundUser) {
+            return res.status(401).json({ error: 'Unauthorized' });
         }
+        
+        (req as any).user = foundUser;
+        next();
+    } catch (err) {
+        return res.status(401).json({ error: 'Invalid token' });
     }
-    
-    if (!foundUser) {
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
-    
-    (req as any).user = foundUser;
-    next();
 };
 
 app.get('/me', authMiddleware, (req, res) => {
@@ -94,9 +108,9 @@ app.use((req, res) => {
     res.status(404).json({ error: 'Not Found' });
 });
 
-const PORT = 4000;
+const PORT = process.env.PORT || 4000;
 const HOST = '0.0.0.0';
 
-app.listen(PORT, HOST, () => {
-    console.log(`Minimal Orbit backend listening on http://${HOST}:${PORT}`);
+app.listen(PORT as number, HOST, () => {
+    console.log(`Server listening on port ${PORT}`);
 });

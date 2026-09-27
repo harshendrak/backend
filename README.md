@@ -8,11 +8,16 @@ This is a minimal in-memory backend for the Orbit Android app, built with Expres
 ## How to run
 
 1. Navigate to this directory (`backend`).
-2. Run the server using `ts-node`:
+2. Copy `.env.example` to a new file named `.env`:
    ```bash
-   npx ts-node server.ts
+   cp .env.example .env
    ```
-3. The server will start and listen on `0.0.0.0:4000`.
+   (Fill in the `JWT_SECRET` with a secure random string if you wish to override the local fallback).
+3. Run the server using `ts-node`:
+   ```bash
+   npx tsx server.ts
+   ```
+4. The server will start and listen on `0.0.0.0:4000` (or whatever `PORT` is defined in your environment variable). On Render, the `PORT` is automatically overridden.
 
 ## Connecting from an Android device
 
